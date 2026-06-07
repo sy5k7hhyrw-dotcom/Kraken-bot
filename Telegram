@@ -1,0 +1,145 @@
+Okay, allora procediamo. Ecco il codice completo da caricare su GitHub:
+
+Crea un file chiamato bot.js nel tuo repository GitHub e copia questo:
+
+const ccxt = require('ccxt');
+const TelegramBot = require('node-telegram-bot-api');
+require('dotenv').config();
+
+const kraken = new ccxt.kraken({
+  apiKey: process.env.KRAKEN_API_KEY,
+  secret: process.env.KRAKEN_SECRET
+});
+
+const bot = new TelegramBot(process.env.TELEGRAM_TOKEN, { polling: true });
+const chatId = process.env.TELEGRAM_CHAT_ID;
+
+const CONFIG = {
+  cryptos: ['SOL/EUR', 'DOGE/EUR', 'XRP/EUR', 'LINK/EUR'],
+  rsiThreshold: 30,
+  takeProfitPercent: 12,
+  stopLossPercent: 8,
+  capitalPerTrade: 35
+};
+
+let tradeHistory = [];
+let activePositions = {};
+
+// === AGENTE ENTRY ===
+async function checkEntrySignals() {
+  for (let crypto of CONFIG.cryptos) {
+    try {
+      const ohlcv = await kraken.fetchOHLCV(crypto, '4h', undefined, 50);
+      const rsi = calculateRSI(ohlcv);
+      
+      if (rsi < CONFIG.rsiThreshold) {
+        const balance = await kraken.fetchBalance();
+        const available = balance.EUR.free;
+        
+        if (available >= CONFIG.capitalPerTrade) {
+          await executeBuy(crypto, available * 0.5);
+        }
+      }
+    } catch (e) {
+      console.error(`Error checking ${crypto}:`, e.message);
+    }
+  }
+}
+
+// === AGENTE POSITION MANAGER ===
+async function managePositions() {
+  for (let orderId in activePositions) {
+    const position = activePositions[orderId];
+    const ticker = await kraken.fetchTicker(position.crypto);
+    const currentPrice = ticker.last;
+    const profitPercent = ((currentPrice - position.entryPrice) / position.entryPrice) * 100;
+    
+    if (profitPercent >= CONFIG.takeProfitPercent) {
+      await executeSell(position.crypto, position.amount, 'TAKE_PROFIT');
+      delete activePositions[orderId];
+    } else if (profitPercent <= -CONFIG.stopLossPercent) {
+      await executeSell(position.crypto, position.amount, 'STOP_LOSS');
+      delete activePositions[orderId];
+    }
+  }
+}
+
+// === FUNZIONI DI TRADING ===
+async function executeBuy(crypto, amount) {
+  try {
+    const ticker = await kraken.fetchTicker(crypto);
+    const order = await kraken.createLimitBuyOrder(crypto, amount / ticker.last, ticker.last * 0.99);
+    
+    activePositions[order.id] = {
+      crypto: crypto,
+      entryPrice: order.price,
+      amount: amount / ticker.last,
+      timestamp: new Date()
+    };
+    
+    tradeHistory.push({
+      type: 'BUY',
+      crypto: crypto,
+      price: order.price,
+      amount: amount / ticker.last,
+      timestamp: new Date(),
+      reason: 'RSI_OVERSOLD'
+    });
+    
+    bot.sendMessage(chatId, `BUY ${crypto}\nPrice: ${order.price}\nAmount: ${(amount / ticker.last).toFixed(4)}`);
+  } catch (e) {
+    console.error('Buy error:', e.message);
+  }
+}
+
+async function executeSell(crypto, amount, reason) {
+  try {
+    const ticker = await kraken.fetchTicker(crypto);
+    const order = await kraken.createLimitSellOrder(crypto, amount, ticker.last * 1.01);
+    
+    tradeHistory.push({
+      type: 'SELL',
+      crypto: crypto,
+      price: order.price,
+      amount: amount,
+      timestamp: new Date(),
+      reason: reason
+    });
+    
+    bot.sendMessage(chatId, `SELL ${crypto}\nPrice: ${order.price}\nReason: ${reason}`);
+  } catch (e) {
+    console.error('Sell error:', e.message);
+  }
+}
+
+// === CALCOLO RSI ===
+function calculateRSI(ohlcv, period = 14) {
+  const closes = ohlcv.map(candle => candle[4]);
+  let gains = 0, losses = 0;
+  
+  for (let i = 1; i < period; i++) {
+    const diff = closes[i] - closes[i - 1];
+    if (diff > 0) gains += diff;
+    else losses += Math.abs(diff);
+  }
+  
+  const avgGain = gains / period;
+  const avgLoss = losses / period;
+  const rs = avgGain / avgLoss;
+  const rsi = 100 - (100 / (1 + rs));
+  
+  return rsi;
+}
+
+// === MACHINE LEARNING - ANALISI ERRORI ===
+function analyzeErrors() {
+  let wins = 0, losses = 0;
+  
+  for (let trade of tradeHistory) {
+    if (trade.type === 'SELL') {
+      if (trade.profit > 0) wins++;
+      else losses++;
+    }
+  }
+  
+  const winRate = wins / (wins + losses) *...
