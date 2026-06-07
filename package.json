@@ -12,7 +12,7 @@
     "debug": "^4.4.1",
     "express": "^4.21.2",
     "http-errors": "^2.0.0",
-    "lorem-ipsum": "^2.0.8",
+    "lorem-ipsum": "^3.0.0",
     "md5": "^2.3.0",
     "mersenne-twister": "^1.1.0",
     "morgan": "^1.10.1",
