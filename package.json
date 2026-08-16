@@ -9,7 +9,7 @@
     "clean-css": "^5.3.3",
     "constantinople": "^4.0.1",
     "cookie-parser": "^1.4.7",
-    "debug": "^4.4.1",
+    "debug": "^4.4.3",
     "express": "^4.21.2",
     "http-errors": "^2.0.0",
     "lorem-ipsum": "^2.0.8",
